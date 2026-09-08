@@ -31,6 +31,10 @@ public class AccountService {
                         UNSUPPORTED_EVENT_TYPE, "unknown event type: " + command.type()));
     }
 
+    public synchronized void reset() {
+        store.clear();
+    }
+
     public synchronized BalanceQueryResult balanceOf(String accountId) {
         return store.find(accountId)
                 .<BalanceQueryResult>map(account -> new BalanceQueryResult.Found(account.balance()))

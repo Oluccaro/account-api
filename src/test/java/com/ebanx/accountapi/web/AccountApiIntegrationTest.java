@@ -28,8 +28,8 @@ class AccountApiIntegrationTest {
     private AccountStore store;
 
     @BeforeEach
-    void clearState() {
-        store.clear();
+    void clearState() throws Exception {
+        mockMvc.perform(post("/reset")).andExpect(status().isOk());
     }
 
     @Test
@@ -118,6 +118,19 @@ class AccountApiIntegrationTest {
 
         mockMvc.perform(get("/balance").param("account_id", "300"))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void resetClearsAllState() throws Exception {
+        event("{\"type\":\"deposit\",\"destination\":\"100\",\"amount\":10}");
+
+        mockMvc.perform(post("/reset"))
+                .andExpect(status().isOk())
+                .andExpect(content().string("OK"));
+
+        mockMvc.perform(get("/balance").param("account_id", "100"))
+                .andExpect(status().isNotFound())
+                .andExpect(content().string("0"));
     }
 
     @Test

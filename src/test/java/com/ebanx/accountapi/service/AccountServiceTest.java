@@ -181,6 +181,17 @@ class AccountServiceTest {
         assertThat(failureOf(result).kind()).isEqualTo(INVALID_EVENT);
     }
 
+    @Test
+    void resetClearsEveryAccount() {
+        service.process(deposit("100", "10"));
+        service.process(deposit("300", "5"));
+
+        service.reset();
+
+        assertThat(store.find("100")).isEmpty();
+        assertThat(store.find("300")).isEmpty();
+    }
+
     private BigDecimal balanceOf(String id) {
         return store.find(id).orElseThrow().balance();
     }

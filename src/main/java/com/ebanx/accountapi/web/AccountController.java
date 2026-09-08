@@ -31,6 +31,12 @@ public class AccountController {
         };
     }
 
+    @PostMapping("/reset")
+    public ResponseEntity<String> reset() {
+        accountService.reset();
+        return ResponseEntity.ok("OK");
+    }
+
     @GetMapping("/balance")
     public ResponseEntity<BigDecimal> balance(@RequestParam("account_id") String accountId) {
         return switch (accountService.balanceOf(accountId)) {
