@@ -42,6 +42,10 @@ public class AccountController {
 
     private ResponseEntity<Object> errorFor(TransactionResult.Failure failure) {
         return switch (failure.kind()) {
+            case ACCOUNT_NOT_FOUND ->
+                    ResponseEntity.status(HttpStatus.NOT_FOUND).body(BigDecimal.ZERO);
+            case INSUFFICIENT_FUNDS -> ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
+                    .body(new ErrorResponse(failure.kind().name(), failure.message()));
             case UNSUPPORTED_EVENT_TYPE, INVALID_EVENT -> ResponseEntity.badRequest()
                     .body(new ErrorResponse(failure.kind().name(), failure.message()));
         };

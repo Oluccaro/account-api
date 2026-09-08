@@ -4,7 +4,8 @@ import java.util.Arrays;
 import java.util.Optional;
 
 public enum EventType {
-    DEPOSIT;
+    DEPOSIT,
+    WITHDRAW;
 
     public static Optional<EventType> parse(String value) {
         return Arrays.stream(values())

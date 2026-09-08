@@ -70,6 +70,36 @@ class AccountApiIntegrationTest {
     }
 
     @Test
+    void withdrawFromAnUnknownAccountIsNotFoundWithZero() throws Exception {
+        event("{\"type\":\"withdraw\",\"origin\":\"200\",\"amount\":10}")
+                .andExpect(status().isNotFound())
+                .andExpect(content().string("0"));
+    }
+
+    @Test
+    void withdrawFromAnExistingAccountDebitsIt() throws Exception {
+        event("{\"type\":\"deposit\",\"destination\":\"100\",\"amount\":20}");
+
+        event("{\"type\":\"withdraw\",\"origin\":\"100\",\"amount\":5}")
+                .andExpect(status().isCreated())
+                .andExpect(content().json("{\"origin\":{\"id\":\"100\",\"balance\":15}}"))
+                .andExpect(jsonPath("$.destination").doesNotExist());
+    }
+
+    @Test
+    void withdrawBeyondTheBalanceIsUnprocessableAndChangesNothing() throws Exception {
+        event("{\"type\":\"deposit\",\"destination\":\"100\",\"amount\":10}");
+
+        event("{\"type\":\"withdraw\",\"origin\":\"100\",\"amount\":11}")
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.error").value("INSUFFICIENT_FUNDS"));
+
+        mockMvc.perform(get("/balance").param("account_id", "100"))
+                .andExpect(status().isOk())
+                .andExpect(content().string("10"));
+    }
+
+    @Test
     void anUnknownEventTypeIsRejected() throws Exception {
         event("{\"type\":\"bogus\",\"destination\":\"100\",\"amount\":10}")
                 .andExpect(status().isBadRequest())

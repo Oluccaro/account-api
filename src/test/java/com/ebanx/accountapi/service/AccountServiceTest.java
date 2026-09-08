@@ -1,5 +1,7 @@
 package com.ebanx.accountapi.service;
 
+import static com.ebanx.accountapi.domain.TransactionResult.ErrorKind.ACCOUNT_NOT_FOUND;
+import static com.ebanx.accountapi.domain.TransactionResult.ErrorKind.INSUFFICIENT_FUNDS;
 import static com.ebanx.accountapi.domain.TransactionResult.ErrorKind.INVALID_EVENT;
 import static com.ebanx.accountapi.domain.TransactionResult.ErrorKind.UNSUPPORTED_EVENT_TYPE;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -9,6 +11,7 @@ import com.ebanx.accountapi.domain.AccountStore;
 import com.ebanx.accountapi.domain.BalanceQueryResult;
 import com.ebanx.accountapi.domain.TransactionResult;
 import com.ebanx.accountapi.service.handlers.DepositHandler;
+import com.ebanx.accountapi.service.handlers.WithdrawHandler;
 import java.math.BigDecimal;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -22,7 +25,10 @@ class AccountServiceTest {
     @BeforeEach
     void setUp() {
         store = new AccountStore();
-        service = new AccountService(store, new EventHandlerRegistry(List.of(new DepositHandler(store))));
+        service = new AccountService(
+                store,
+                new EventHandlerRegistry(
+                        List.of(new DepositHandler(store), new WithdrawHandler(store))));
     }
 
     @Test
@@ -45,7 +51,7 @@ class AccountServiceTest {
         TransactionResult result = service.process(deposit("100", "10"));
 
         assertThat(destinationOf(result).balance()).isEqualByComparingTo("10");
-        assertThat(store.find("100")).get().extracting(Account::balance).isEqualTo(new BigDecimal("10"));
+        assertThat(balanceOf("100")).isEqualByComparingTo("10");
     }
 
     @Test
@@ -55,12 +61,50 @@ class AccountServiceTest {
         TransactionResult result = service.process(deposit("100", "10"));
 
         assertThat(destinationOf(result).balance()).isEqualByComparingTo("20");
-        assertThat(store.find("100")).get().extracting(Account::balance).isEqualTo(new BigDecimal("20"));
+        assertThat(balanceOf("100")).isEqualByComparingTo("20");
+    }
+
+    @Test
+    void withdrawDebitsAnExistingAccount() {
+        service.process(deposit("100", "20"));
+
+        TransactionResult result = service.process(withdraw("100", "5"));
+
+        assertThat(originOf(result).balance()).isEqualByComparingTo("15");
+        assertThat(balanceOf("100")).isEqualByComparingTo("15");
+    }
+
+    @Test
+    void rejectsAWithdrawalFromAnUnknownAccount() {
+        TransactionResult result = service.process(withdraw("200", "10"));
+
+        assertThat(failureOf(result).kind()).isEqualTo(ACCOUNT_NOT_FOUND);
+        assertThat(store.find("200")).isEmpty();
+    }
+
+    @Test
+    void rejectsAWithdrawalBeyondTheBalanceAndLeavesItUnchanged() {
+        service.process(deposit("100", "10"));
+
+        TransactionResult result = service.process(withdraw("100", "11"));
+
+        assertThat(failureOf(result).kind()).isEqualTo(INSUFFICIENT_FUNDS);
+        assertThat(balanceOf("100")).isEqualByComparingTo("10");
+    }
+
+    @Test
+    void allowsAWithdrawalOfTheEntireBalance() {
+        service.process(deposit("100", "10"));
+
+        TransactionResult result = service.process(withdraw("100", "10"));
+
+        assertThat(originOf(result).balance()).isEqualByComparingTo("0");
     }
 
     @Test
     void rejectsAnUnknownEventType() {
-        TransactionResult result = service.process(new EventCommand("bogus", null, "100", BigDecimal.TEN));
+        TransactionResult result =
+                service.process(new EventCommand("bogus", null, "100", BigDecimal.TEN));
 
         assertThat(failureOf(result).kind()).isEqualTo(UNSUPPORTED_EVENT_TYPE);
         assertThat(store.find("100")).isEmpty();
@@ -68,13 +112,35 @@ class AccountServiceTest {
 
     @Test
     void rejectsADepositWithoutADestination() {
-        TransactionResult result = service.process(new EventCommand("deposit", null, null, BigDecimal.TEN));
+        TransactionResult result =
+                service.process(new EventCommand("deposit", null, null, BigDecimal.TEN));
 
         assertThat(failureOf(result).kind()).isEqualTo(INVALID_EVENT);
     }
 
+    @Test
+    void rejectsAWithdrawalWithoutAnOrigin() {
+        TransactionResult result =
+                service.process(new EventCommand("withdraw", null, null, BigDecimal.TEN));
+
+        assertThat(failureOf(result).kind()).isEqualTo(INVALID_EVENT);
+    }
+
+    private BigDecimal balanceOf(String id) {
+        return store.find(id).orElseThrow().balance();
+    }
+
     private static EventCommand deposit(String destination, String amount) {
         return new EventCommand("deposit", null, destination, new BigDecimal(amount));
+    }
+
+    private static EventCommand withdraw(String origin, String amount) {
+        return new EventCommand("withdraw", origin, null, new BigDecimal(amount));
+    }
+
+    private static Account originOf(TransactionResult result) {
+        assertThat(result).isInstanceOf(TransactionResult.Success.class);
+        return ((TransactionResult.Success) result).origin();
     }
 
     private static Account destinationOf(TransactionResult result) {
