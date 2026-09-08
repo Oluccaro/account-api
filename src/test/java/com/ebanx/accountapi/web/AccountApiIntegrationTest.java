@@ -1,7 +1,9 @@
 package com.ebanx.accountapi.web;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.ebanx.accountapi.domain.Account;
@@ -12,6 +14,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 @SpringBootTest
@@ -43,5 +46,54 @@ class AccountApiIntegrationTest {
         mockMvc.perform(get("/balance").param("account_id", "100"))
                 .andExpect(status().isOk())
                 .andExpect(content().string("20"));
+    }
+
+    @Test
+    void depositCreatesTheAccountWithTheInitialBalance() throws Exception {
+        event("{\"type\":\"deposit\",\"destination\":\"100\",\"amount\":10}")
+                .andExpect(status().isCreated())
+                .andExpect(content().json("{\"destination\":{\"id\":\"100\",\"balance\":10}}"))
+                .andExpect(jsonPath("$.origin").doesNotExist());
+    }
+
+    @Test
+    void depositIntoAnExistingAccountAccumulates() throws Exception {
+        event("{\"type\":\"deposit\",\"destination\":\"100\",\"amount\":10}");
+
+        event("{\"type\":\"deposit\",\"destination\":\"100\",\"amount\":10}")
+                .andExpect(status().isCreated())
+                .andExpect(content().json("{\"destination\":{\"id\":\"100\",\"balance\":20}}"));
+
+        mockMvc.perform(get("/balance").param("account_id", "100"))
+                .andExpect(status().isOk())
+                .andExpect(content().string("20"));
+    }
+
+    @Test
+    void anUnknownEventTypeIsRejected() throws Exception {
+        event("{\"type\":\"bogus\",\"destination\":\"100\",\"amount\":10}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("UNSUPPORTED_EVENT_TYPE"));
+    }
+
+    @Test
+    void aNonPositiveAmountIsRejected() throws Exception {
+        event("{\"type\":\"deposit\",\"destination\":\"100\",\"amount\":-10}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("INVALID_REQUEST"));
+
+        mockMvc.perform(get("/balance").param("account_id", "100"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void aMissingAccountIdIsRejected() throws Exception {
+        mockMvc.perform(get("/balance"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("INVALID_REQUEST"));
+    }
+
+    private org.springframework.test.web.servlet.ResultActions event(String body) throws Exception {
+        return mockMvc.perform(post("/event").contentType(MediaType.APPLICATION_JSON).content(body));
     }
 }
