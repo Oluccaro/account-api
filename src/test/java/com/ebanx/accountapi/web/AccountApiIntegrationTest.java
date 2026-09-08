@@ -100,6 +100,27 @@ class AccountApiIntegrationTest {
     }
 
     @Test
+    void transferMovesFundsAndCreatesTheDestination() throws Exception {
+        event("{\"type\":\"deposit\",\"destination\":\"100\",\"amount\":15}");
+
+        event("{\"type\":\"transfer\",\"origin\":\"100\",\"amount\":15,\"destination\":\"300\"}")
+                .andExpect(status().isCreated())
+                .andExpect(content().json(
+                        "{\"origin\":{\"id\":\"100\",\"balance\":0},"
+                                + "\"destination\":{\"id\":\"300\",\"balance\":15}}"));
+    }
+
+    @Test
+    void transferFromAnUnknownAccountIsNotFoundAndChangesNothing() throws Exception {
+        event("{\"type\":\"transfer\",\"origin\":\"200\",\"amount\":15,\"destination\":\"300\"}")
+                .andExpect(status().isNotFound())
+                .andExpect(content().string("0"));
+
+        mockMvc.perform(get("/balance").param("account_id", "300"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     void anUnknownEventTypeIsRejected() throws Exception {
         event("{\"type\":\"bogus\",\"destination\":\"100\",\"amount\":10}")
                 .andExpect(status().isBadRequest())

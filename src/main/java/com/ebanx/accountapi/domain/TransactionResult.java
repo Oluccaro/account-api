@@ -21,6 +21,10 @@ public sealed interface TransactionResult {
         return new Success(origin, null);
     }
 
+    static TransactionResult transferred(Account origin, Account destination) {
+        return new Success(origin, destination);
+    }
+
     static TransactionResult failure(ErrorKind kind, String message) {
         return new Failure(kind, message);
     }

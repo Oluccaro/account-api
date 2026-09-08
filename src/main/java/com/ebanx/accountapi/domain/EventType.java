@@ -5,7 +5,8 @@ import java.util.Optional;
 
 public enum EventType {
     DEPOSIT,
-    WITHDRAW;
+    WITHDRAW,
+    TRANSFER;
 
     public static Optional<EventType> parse(String value) {
         return Arrays.stream(values())

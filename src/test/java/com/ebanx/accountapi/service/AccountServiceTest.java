@@ -11,6 +11,7 @@ import com.ebanx.accountapi.domain.AccountStore;
 import com.ebanx.accountapi.domain.BalanceQueryResult;
 import com.ebanx.accountapi.domain.TransactionResult;
 import com.ebanx.accountapi.service.handlers.DepositHandler;
+import com.ebanx.accountapi.service.handlers.TransferHandler;
 import com.ebanx.accountapi.service.handlers.WithdrawHandler;
 import java.math.BigDecimal;
 import java.util.List;
@@ -28,7 +29,10 @@ class AccountServiceTest {
         service = new AccountService(
                 store,
                 new EventHandlerRegistry(
-                        List.of(new DepositHandler(store), new WithdrawHandler(store))));
+                        List.of(
+                                new DepositHandler(store),
+                                new WithdrawHandler(store),
+                                new TransferHandler(store))));
     }
 
     @Test
@@ -102,6 +106,57 @@ class AccountServiceTest {
     }
 
     @Test
+    void transferMovesFundsAndCreatesTheDestination() {
+        service.process(deposit("100", "15"));
+
+        TransactionResult result = service.process(transfer("100", "300", "15"));
+
+        assertThat(originOf(result).balance()).isEqualByComparingTo("0");
+        assertThat(destinationOf(result).balance()).isEqualByComparingTo("15");
+        assertThat(balanceOf("100")).isEqualByComparingTo("0");
+        assertThat(balanceOf("300")).isEqualByComparingTo("15");
+    }
+
+    @Test
+    void rejectsATransferFromAnUnknownAccountWithoutCreatingTheDestination() {
+        TransactionResult result = service.process(transfer("200", "300", "15"));
+
+        assertThat(failureOf(result).kind()).isEqualTo(ACCOUNT_NOT_FOUND);
+        assertThat(store.find("200")).isEmpty();
+        assertThat(store.find("300")).isEmpty();
+    }
+
+    @Test
+    void rejectsATransferBeyondTheBalanceAndLeavesBothSidesUnchanged() {
+        service.process(deposit("100", "10"));
+        service.process(deposit("300", "5"));
+
+        TransactionResult result = service.process(transfer("100", "300", "11"));
+
+        assertThat(failureOf(result).kind()).isEqualTo(INSUFFICIENT_FUNDS);
+        assertThat(balanceOf("100")).isEqualByComparingTo("10");
+        assertThat(balanceOf("300")).isEqualByComparingTo("5");
+    }
+
+    @Test
+    void rejectsATransferToTheSameAccount() {
+        service.process(deposit("100", "10"));
+
+        TransactionResult result = service.process(transfer("100", "100", "10"));
+
+        assertThat(failureOf(result).kind()).isEqualTo(INVALID_EVENT);
+        assertThat(balanceOf("100")).isEqualByComparingTo("10");
+    }
+
+    @Test
+    void rejectsATransferWithoutADestination() {
+        TransactionResult result =
+                service.process(new EventCommand("transfer", "100", null, BigDecimal.TEN));
+
+        assertThat(failureOf(result).kind()).isEqualTo(INVALID_EVENT);
+    }
+
+    @Test
     void rejectsAnUnknownEventType() {
         TransactionResult result =
                 service.process(new EventCommand("bogus", null, "100", BigDecimal.TEN));
@@ -136,6 +191,10 @@ class AccountServiceTest {
 
     private static EventCommand withdraw(String origin, String amount) {
         return new EventCommand("withdraw", origin, null, new BigDecimal(amount));
+    }
+
+    private static EventCommand transfer(String origin, String destination, String amount) {
+        return new EventCommand("transfer", origin, destination, new BigDecimal(amount));
     }
 
     private static Account originOf(TransactionResult result) {
