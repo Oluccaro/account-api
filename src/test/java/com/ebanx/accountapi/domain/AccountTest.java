@@ -9,26 +9,26 @@ class AccountTest {
 
     @Test
     void opensWithAZeroBalance() {
-        assertThat(Account.open("100").balance()).isEqualByComparingTo("0");
+        assertThat(Account.open("acc-a").balance()).isEqualByComparingTo("0");
     }
 
     @Test
     void depositAddsToTheBalance() {
-        Account account = Account.open("100").deposit(new BigDecimal("10"));
+        Account account = Account.open("acc-a").deposit(new BigDecimal("10"));
 
         assertThat(account.balance()).isEqualByComparingTo("10");
     }
 
     @Test
     void withdrawSubtractsFromTheBalance() {
-        Account account = new Account("100", new BigDecimal("20")).withdraw(new BigDecimal("5"));
+        Account account = new Account("acc-a", new BigDecimal("20")).withdraw(new BigDecimal("5"));
 
         assertThat(account.balance()).isEqualByComparingTo("15");
     }
 
     @Test
     void operationsLeaveTheOriginalInstanceUntouched() {
-        Account original = new Account("100", new BigDecimal("20"));
+        Account original = new Account("acc-a", new BigDecimal("20"));
 
         original.deposit(new BigDecimal("10"));
         original.withdraw(new BigDecimal("10"));
@@ -38,7 +38,7 @@ class AccountTest {
 
     @Test
     void hasAtLeastAcceptsTheExactBalance() {
-        Account account = new Account("100", new BigDecimal("20"));
+        Account account = new Account("acc-a", new BigDecimal("20"));
 
         assertThat(account.hasAtLeast(new BigDecimal("20"))).isTrue();
         assertThat(account.hasAtLeast(new BigDecimal("19"))).isTrue();

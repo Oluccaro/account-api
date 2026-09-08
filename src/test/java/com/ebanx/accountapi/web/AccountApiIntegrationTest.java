@@ -34,119 +34,153 @@ class AccountApiIntegrationTest {
 
     @Test
     void balanceOfAnUnknownAccountIsNotFoundWithZero() throws Exception {
-        mockMvc.perform(get("/balance").param("account_id", "1234"))
+        mockMvc.perform(get("/balance").param("account_id", "acc-unknown"))
                 .andExpect(status().isNotFound())
                 .andExpect(content().string("0"));
     }
 
     @Test
     void balanceOfAnExistingAccountIsReturned() throws Exception {
-        store.save(new Account("100", new BigDecimal("20")));
+        store.save(new Account("acc-a", new BigDecimal("20")));
 
-        mockMvc.perform(get("/balance").param("account_id", "100"))
+        mockMvc.perform(get("/balance").param("account_id", "acc-a"))
                 .andExpect(status().isOk())
                 .andExpect(content().string("20"));
     }
 
     @Test
     void depositCreatesTheAccountWithTheInitialBalance() throws Exception {
-        event("{\"type\":\"deposit\",\"destination\":\"100\",\"amount\":10}")
+        event("""
+                {"type":"deposit","destination":"acc-a","amount":10}
+                """)
                 .andExpect(status().isCreated())
-                .andExpect(content().json("{\"destination\":{\"id\":\"100\",\"balance\":10}}"))
+                .andExpect(content().json("""
+                        {"destination":{"id":"acc-a","balance":10}}
+                        """))
                 .andExpect(jsonPath("$.origin").doesNotExist());
     }
 
     @Test
     void depositIntoAnExistingAccountAccumulates() throws Exception {
-        event("{\"type\":\"deposit\",\"destination\":\"100\",\"amount\":10}");
+        event("""
+                {"type":"deposit","destination":"acc-a","amount":10}
+                """);
 
-        event("{\"type\":\"deposit\",\"destination\":\"100\",\"amount\":10}")
+        event("""
+                {"type":"deposit","destination":"acc-a","amount":10}
+                """)
                 .andExpect(status().isCreated())
-                .andExpect(content().json("{\"destination\":{\"id\":\"100\",\"balance\":20}}"));
+                .andExpect(content().json("""
+                        {"destination":{"id":"acc-a","balance":20}}
+                        """));
 
-        mockMvc.perform(get("/balance").param("account_id", "100"))
+        mockMvc.perform(get("/balance").param("account_id", "acc-a"))
                 .andExpect(status().isOk())
                 .andExpect(content().string("20"));
     }
 
     @Test
     void withdrawFromAnUnknownAccountIsNotFoundWithZero() throws Exception {
-        event("{\"type\":\"withdraw\",\"origin\":\"200\",\"amount\":10}")
+        event("""
+                {"type":"withdraw","origin":"acc-missing","amount":10}
+                """)
                 .andExpect(status().isNotFound())
                 .andExpect(content().string("0"));
     }
 
     @Test
     void withdrawFromAnExistingAccountDebitsIt() throws Exception {
-        event("{\"type\":\"deposit\",\"destination\":\"100\",\"amount\":20}");
+        event("""
+                {"type":"deposit","destination":"acc-a","amount":20}
+                """);
 
-        event("{\"type\":\"withdraw\",\"origin\":\"100\",\"amount\":5}")
+        event("""
+                {"type":"withdraw","origin":"acc-a","amount":5}
+                """)
                 .andExpect(status().isCreated())
-                .andExpect(content().json("{\"origin\":{\"id\":\"100\",\"balance\":15}}"))
+                .andExpect(content().json("""
+                        {"origin":{"id":"acc-a","balance":15}}
+                        """))
                 .andExpect(jsonPath("$.destination").doesNotExist());
     }
 
     @Test
     void withdrawBeyondTheBalanceIsUnprocessableAndChangesNothing() throws Exception {
-        event("{\"type\":\"deposit\",\"destination\":\"100\",\"amount\":10}");
+        event("""
+                {"type":"deposit","destination":"acc-a","amount":10}
+                """);
 
-        event("{\"type\":\"withdraw\",\"origin\":\"100\",\"amount\":11}")
+        event("""
+                {"type":"withdraw","origin":"acc-a","amount":11}
+                """)
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.error").value("INSUFFICIENT_FUNDS"));
 
-        mockMvc.perform(get("/balance").param("account_id", "100"))
+        mockMvc.perform(get("/balance").param("account_id", "acc-a"))
                 .andExpect(status().isOk())
                 .andExpect(content().string("10"));
     }
 
     @Test
     void transferMovesFundsAndCreatesTheDestination() throws Exception {
-        event("{\"type\":\"deposit\",\"destination\":\"100\",\"amount\":15}");
+        event("""
+                {"type":"deposit","destination":"acc-a","amount":15}
+                """);
 
-        event("{\"type\":\"transfer\",\"origin\":\"100\",\"amount\":15,\"destination\":\"300\"}")
+        event("""
+                {"type":"transfer","origin":"acc-a","amount":15,"destination":"acc-b"}
+                """)
                 .andExpect(status().isCreated())
-                .andExpect(content().json(
-                        "{\"origin\":{\"id\":\"100\",\"balance\":0},"
-                                + "\"destination\":{\"id\":\"300\",\"balance\":15}}"));
+                .andExpect(content().json("""
+                        {"origin":{"id":"acc-a","balance":0},"destination":{"id":"acc-b","balance":15}}
+                        """));
     }
 
     @Test
     void transferFromAnUnknownAccountIsNotFoundAndChangesNothing() throws Exception {
-        event("{\"type\":\"transfer\",\"origin\":\"200\",\"amount\":15,\"destination\":\"300\"}")
+        event("""
+                {"type":"transfer","origin":"acc-missing","amount":15,"destination":"acc-b"}
+                """)
                 .andExpect(status().isNotFound())
                 .andExpect(content().string("0"));
 
-        mockMvc.perform(get("/balance").param("account_id", "300"))
+        mockMvc.perform(get("/balance").param("account_id", "acc-b"))
                 .andExpect(status().isNotFound());
     }
 
     @Test
     void resetClearsAllState() throws Exception {
-        event("{\"type\":\"deposit\",\"destination\":\"100\",\"amount\":10}");
+        event("""
+                {"type":"deposit","destination":"acc-a","amount":10}
+                """);
 
         mockMvc.perform(post("/reset"))
                 .andExpect(status().isOk())
                 .andExpect(content().string("OK"));
 
-        mockMvc.perform(get("/balance").param("account_id", "100"))
+        mockMvc.perform(get("/balance").param("account_id", "acc-a"))
                 .andExpect(status().isNotFound())
                 .andExpect(content().string("0"));
     }
 
     @Test
     void anUnknownEventTypeIsRejected() throws Exception {
-        event("{\"type\":\"bogus\",\"destination\":\"100\",\"amount\":10}")
+        event("""
+                {"type":"bogus","destination":"acc-a","amount":10}
+                """)
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value("UNSUPPORTED_EVENT_TYPE"));
     }
 
     @Test
     void aNonPositiveAmountIsRejected() throws Exception {
-        event("{\"type\":\"deposit\",\"destination\":\"100\",\"amount\":-10}")
+        event("""
+                {"type":"deposit","destination":"acc-a","amount":-10}
+                """)
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.error").value("INVALID_REQUEST"));
 
-        mockMvc.perform(get("/balance").param("account_id", "100"))
+        mockMvc.perform(get("/balance").param("account_id", "acc-a"))
                 .andExpect(status().isNotFound());
     }
 

@@ -31,33 +31,51 @@ class SpecScenarioTest {
                 .andExpect(status().isNotFound())
                 .andExpect(content().string("0"));
 
-        event("{\"type\":\"deposit\", \"destination\":\"100\", \"amount\":10}")
+        event("""
+                {"type":"deposit", "destination":"100", "amount":10}
+                """)
                 .andExpect(status().isCreated())
-                .andExpect(content().string("{\"destination\":{\"id\":\"100\",\"balance\":10}}"));
+                .andExpect(content().string("""
+                        {"destination":{"id":"100","balance":10}}
+                        """.strip()));
 
-        event("{\"type\":\"deposit\", \"destination\":\"100\", \"amount\":10}")
+        event("""
+                {"type":"deposit", "destination":"100", "amount":10}
+                """)
                 .andExpect(status().isCreated())
-                .andExpect(content().string("{\"destination\":{\"id\":\"100\",\"balance\":20}}"));
+                .andExpect(content().string("""
+                        {"destination":{"id":"100","balance":20}}
+                        """.strip()));
 
         mockMvc.perform(get("/balance").param("account_id", "100"))
                 .andExpect(status().isOk())
                 .andExpect(content().string("20"));
 
-        event("{\"type\":\"withdraw\", \"origin\":\"200\", \"amount\":10}")
+        event("""
+                {"type":"withdraw", "origin":"200", "amount":10}
+                """)
                 .andExpect(status().isNotFound())
                 .andExpect(content().string("0"));
 
-        event("{\"type\":\"withdraw\", \"origin\":\"100\", \"amount\":5}")
+        event("""
+                {"type":"withdraw", "origin":"100", "amount":5}
+                """)
                 .andExpect(status().isCreated())
-                .andExpect(content().string("{\"origin\":{\"id\":\"100\",\"balance\":15}}"));
+                .andExpect(content().string("""
+                        {"origin":{"id":"100","balance":15}}
+                        """.strip()));
 
-        event("{\"type\":\"transfer\", \"origin\":\"100\", \"amount\":15, \"destination\":\"300\"}")
+        event("""
+                {"type":"transfer", "origin":"100", "amount":15, "destination":"300"}
+                """)
                 .andExpect(status().isCreated())
-                .andExpect(content().string(
-                        "{\"origin\":{\"id\":\"100\",\"balance\":0},"
-                                + "\"destination\":{\"id\":\"300\",\"balance\":15}}"));
+                .andExpect(content().string("""
+                        {"origin":{"id":"100","balance":0},"destination":{"id":"300","balance":15}}
+                        """.strip()));
 
-        event("{\"type\":\"transfer\", \"origin\":\"200\", \"amount\":15, \"destination\":\"300\"}")
+        event("""
+                {"type":"transfer", "origin":"200", "amount":15, "destination":"300"}
+                """)
                 .andExpect(status().isNotFound())
                 .andExpect(content().string("0"));
     }

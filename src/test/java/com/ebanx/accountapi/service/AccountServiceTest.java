@@ -37,9 +37,9 @@ class AccountServiceTest {
 
     @Test
     void reportsTheBalanceOfAnExistingAccount() {
-        store.save(new Account("100", new BigDecimal("20")));
+        store.save(new Account("acc-a", new BigDecimal("20")));
 
-        BalanceQueryResult result = service.balanceOf("100");
+        BalanceQueryResult result = service.balanceOf("acc-a");
 
         assertThat(result).isInstanceOf(BalanceQueryResult.Found.class);
         assertThat(((BalanceQueryResult.Found) result).balance()).isEqualByComparingTo("20");
@@ -47,111 +47,111 @@ class AccountServiceTest {
 
     @Test
     void reportsNotFoundForAnUnknownAccount() {
-        assertThat(service.balanceOf("1234")).isInstanceOf(BalanceQueryResult.NotFound.class);
+        assertThat(service.balanceOf("acc-unknown")).isInstanceOf(BalanceQueryResult.NotFound.class);
     }
 
     @Test
     void depositCreatesTheAccountWhenItDoesNotExist() {
-        TransactionResult result = service.process(deposit("100", "10"));
+        TransactionResult result = service.process(deposit("acc-a", "10"));
 
         assertThat(destinationOf(result).balance()).isEqualByComparingTo("10");
-        assertThat(balanceOf("100")).isEqualByComparingTo("10");
+        assertThat(balanceOf("acc-a")).isEqualByComparingTo("10");
     }
 
     @Test
     void depositCreditsAnExistingAccount() {
-        service.process(deposit("100", "10"));
+        service.process(deposit("acc-a", "10"));
 
-        TransactionResult result = service.process(deposit("100", "10"));
+        TransactionResult result = service.process(deposit("acc-a", "10"));
 
         assertThat(destinationOf(result).balance()).isEqualByComparingTo("20");
-        assertThat(balanceOf("100")).isEqualByComparingTo("20");
+        assertThat(balanceOf("acc-a")).isEqualByComparingTo("20");
     }
 
     @Test
     void withdrawDebitsAnExistingAccount() {
-        service.process(deposit("100", "20"));
+        service.process(deposit("acc-a", "20"));
 
-        TransactionResult result = service.process(withdraw("100", "5"));
+        TransactionResult result = service.process(withdraw("acc-a", "5"));
 
         assertThat(originOf(result).balance()).isEqualByComparingTo("15");
-        assertThat(balanceOf("100")).isEqualByComparingTo("15");
+        assertThat(balanceOf("acc-a")).isEqualByComparingTo("15");
     }
 
     @Test
     void rejectsAWithdrawalFromAnUnknownAccount() {
-        TransactionResult result = service.process(withdraw("200", "10"));
+        TransactionResult result = service.process(withdraw("acc-missing", "10"));
 
         assertThat(failureOf(result).kind()).isEqualTo(ACCOUNT_NOT_FOUND);
-        assertThat(store.find("200")).isEmpty();
+        assertThat(store.find("acc-missing")).isEmpty();
     }
 
     @Test
     void rejectsAWithdrawalBeyondTheBalanceAndLeavesItUnchanged() {
-        service.process(deposit("100", "10"));
+        service.process(deposit("acc-a", "10"));
 
-        TransactionResult result = service.process(withdraw("100", "11"));
+        TransactionResult result = service.process(withdraw("acc-a", "11"));
 
         assertThat(failureOf(result).kind()).isEqualTo(INSUFFICIENT_FUNDS);
-        assertThat(balanceOf("100")).isEqualByComparingTo("10");
+        assertThat(balanceOf("acc-a")).isEqualByComparingTo("10");
     }
 
     @Test
     void allowsAWithdrawalOfTheEntireBalance() {
-        service.process(deposit("100", "10"));
+        service.process(deposit("acc-a", "10"));
 
-        TransactionResult result = service.process(withdraw("100", "10"));
+        TransactionResult result = service.process(withdraw("acc-a", "10"));
 
         assertThat(originOf(result).balance()).isEqualByComparingTo("0");
     }
 
     @Test
     void transferMovesFundsAndCreatesTheDestination() {
-        service.process(deposit("100", "15"));
+        service.process(deposit("acc-a", "15"));
 
-        TransactionResult result = service.process(transfer("100", "300", "15"));
+        TransactionResult result = service.process(transfer("acc-a", "acc-b", "15"));
 
         assertThat(originOf(result).balance()).isEqualByComparingTo("0");
         assertThat(destinationOf(result).balance()).isEqualByComparingTo("15");
-        assertThat(balanceOf("100")).isEqualByComparingTo("0");
-        assertThat(balanceOf("300")).isEqualByComparingTo("15");
+        assertThat(balanceOf("acc-a")).isEqualByComparingTo("0");
+        assertThat(balanceOf("acc-b")).isEqualByComparingTo("15");
     }
 
     @Test
     void rejectsATransferFromAnUnknownAccountWithoutCreatingTheDestination() {
-        TransactionResult result = service.process(transfer("200", "300", "15"));
+        TransactionResult result = service.process(transfer("acc-missing", "acc-b", "15"));
 
         assertThat(failureOf(result).kind()).isEqualTo(ACCOUNT_NOT_FOUND);
-        assertThat(store.find("200")).isEmpty();
-        assertThat(store.find("300")).isEmpty();
+        assertThat(store.find("acc-missing")).isEmpty();
+        assertThat(store.find("acc-b")).isEmpty();
     }
 
     @Test
     void rejectsATransferBeyondTheBalanceAndLeavesBothSidesUnchanged() {
-        service.process(deposit("100", "10"));
-        service.process(deposit("300", "5"));
+        service.process(deposit("acc-a", "10"));
+        service.process(deposit("acc-b", "5"));
 
-        TransactionResult result = service.process(transfer("100", "300", "11"));
+        TransactionResult result = service.process(transfer("acc-a", "acc-b", "11"));
 
         assertThat(failureOf(result).kind()).isEqualTo(INSUFFICIENT_FUNDS);
-        assertThat(balanceOf("100")).isEqualByComparingTo("10");
-        assertThat(balanceOf("300")).isEqualByComparingTo("5");
+        assertThat(balanceOf("acc-a")).isEqualByComparingTo("10");
+        assertThat(balanceOf("acc-b")).isEqualByComparingTo("5");
     }
 
     @Test
     void rejectsATransferToTheSameAccount() {
-        service.process(deposit("100", "10"));
+        service.process(deposit("acc-a", "10"));
 
-        TransactionResult result = service.process(transfer("100", "100", "10"));
+        TransactionResult result = service.process(transfer("acc-a", "acc-a", "10"));
 
         assertThat(failureOf(result).kind()).isEqualTo(INVALID_EVENT);
-        assertThat(balanceOf("100")).isEqualByComparingTo("10");
+        assertThat(balanceOf("acc-a")).isEqualByComparingTo("10");
     }
 
     @Test
     void rejectsATransferWithoutADestination() {
         TransactionResult result =
-                service.process(new EventCommand("transfer", "100", null, BigDecimal.TEN));
+                service.process(new EventCommand("transfer", "acc-a", null, BigDecimal.TEN));
 
         assertThat(failureOf(result).kind()).isEqualTo(INVALID_EVENT);
     }
@@ -159,10 +159,10 @@ class AccountServiceTest {
     @Test
     void rejectsAnUnknownEventType() {
         TransactionResult result =
-                service.process(new EventCommand("bogus", null, "100", BigDecimal.TEN));
+                service.process(new EventCommand("bogus", null, "acc-a", BigDecimal.TEN));
 
         assertThat(failureOf(result).kind()).isEqualTo(UNSUPPORTED_EVENT_TYPE);
-        assertThat(store.find("100")).isEmpty();
+        assertThat(store.find("acc-a")).isEmpty();
     }
 
     @Test
@@ -183,13 +183,13 @@ class AccountServiceTest {
 
     @Test
     void resetClearsEveryAccount() {
-        service.process(deposit("100", "10"));
-        service.process(deposit("300", "5"));
+        service.process(deposit("acc-a", "10"));
+        service.process(deposit("acc-b", "5"));
 
         service.reset();
 
-        assertThat(store.find("100")).isEmpty();
-        assertThat(store.find("300")).isEmpty();
+        assertThat(store.find("acc-a")).isEmpty();
+        assertThat(store.find("acc-b")).isEmpty();
     }
 
     private BigDecimal balanceOf(String id) {

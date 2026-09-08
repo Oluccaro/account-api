@@ -37,9 +37,9 @@ class AccountConcurrencyTest {
 
     @Test
     void everyConcurrentDepositLands() throws Exception {
-        runConcurrently(() -> service.process(deposit("100", BigDecimal.ONE)));
+        runConcurrently(() -> service.process(deposit("acc-a", BigDecimal.ONE)));
 
-        assertThat(balanceOf("100"))
+        assertThat(balanceOf("acc-a"))
                 .isEqualByComparingTo(BigDecimal.valueOf((long) THREADS * OPERATIONS_PER_THREAD));
     }
 
